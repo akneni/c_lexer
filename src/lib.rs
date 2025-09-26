@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs, 
     mem,
 };
 
@@ -655,6 +654,9 @@ pub fn get_fn_def<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
         let mut next_idx = idx;
         if let Token::Comment(_) = tokens[idx] {
             skip_to_end_comment(tokens, &mut next_idx);
+            if next_idx >= tokens.len() {
+                break;
+            }
         }
 
         if let Token::Object(obj) = tokens[next_idx] {
@@ -841,7 +843,7 @@ pub fn get_defines<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
 
     while idx < tokens.len() {
         if tokens[idx] != Token::HashTag
-            && std::mem::discriminant(&tokens[idx]) != std::mem::discriminant(&Token::Comment(""))
+            && mem::discriminant(&tokens[idx]) != mem::discriminant(&Token::Comment(""))
         {
             let valid_prefixes = &[Token::HashTag, Token::Comment("")];
             skip_to_oneof(tokens, valid_prefixes, &mut idx);
@@ -1000,7 +1002,7 @@ fn skip_to_oneof(tokens: &[Token], targets: &[Token], idx: &mut usize) {
     for i in (*idx + 1)..tokens.len() {
         *idx = i;
         for target in targets {
-            if std::mem::discriminant(&tokens[i]) == std::mem::discriminant(target) {
+            if mem::discriminant(&tokens[i]) == mem::discriminant(target) {
                 return;
             }
         }
@@ -1011,12 +1013,12 @@ fn skip_to_oneof(tokens: &[Token], targets: &[Token], idx: &mut usize) {
 /// this function will skip to the end of all of them (including the trailing newline if it exists).
 fn skip_to_end_comment(tokens: &[Token], idx: &mut usize) {
     assert_eq!(
-        std::mem::discriminant(&tokens[*idx]),
-        std::mem::discriminant(&Token::Comment(""))
+        mem::discriminant(&tokens[*idx]),
+        mem::discriminant(&Token::Comment(""))
     );
 
     while *idx < tokens.len()
-        && (std::mem::discriminant(&tokens[*idx]) == std::mem::discriminant(&Token::Comment(""))
+        && (mem::discriminant(&tokens[*idx]) == mem::discriminant(&Token::Comment(""))
             || tokens[*idx] == Token::NewLine)
     {
         if tokens[*idx] == Token::NewLine && *idx+1 < tokens.len() && tokens[*idx + 1] == Token::NewLine {
