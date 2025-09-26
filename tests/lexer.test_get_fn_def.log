@@ -1,0 +1,6 @@
+[Comment("// a function"), NewLine, Object("int"), Space, Object("add"), OpenParen, Object("int"), Space, Object("a"), Comma, Space, Object("int"), Space, Object("b"), CloseParen, Space]
+
+[Object("void"), Space, Object("no_return"), OpenParen, CloseParen, Space]
+
+[Comment("// another function"), NewLine, Object("char"), Asterisk, Space, Object("get_name"), OpenParen, CloseParen, Space]
+
