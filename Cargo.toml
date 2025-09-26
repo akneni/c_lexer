@@ -1,12 +1,12 @@
 [package]
-name = "c_lexer"
+name = "fragmentize"
 version = "0.1.0"
 edition = "2024"
 
 authors = ["Anish Kanthamneni <akneni@gmail.com>"]
 description = "A lexer for C source code. This is mainly for me, I make no guarantees about breaking changes, so you probably shouldn't use this."
 license = "MIT"
-repository = "https://github.com/akneni/c_lexer"
+repository = "https://github.com/akneni/fragmentize"
 documentation = "https://docs.rs/your_crate_name"
 readme = "README.md"
 
