@@ -1019,7 +1019,7 @@ fn skip_to_end_comment(tokens: &[Token], idx: &mut usize) {
         && (std::mem::discriminant(&tokens[*idx]) == std::mem::discriminant(&Token::Comment(""))
             || tokens[*idx] == Token::NewLine)
     {
-        if tokens[*idx] == Token::NewLine && tokens[*idx + 1] == Token::NewLine {
+        if tokens[*idx] == Token::NewLine && *idx+1 < tokens.len() && tokens[*idx + 1] == Token::NewLine {
             break;
         }
         *idx += 1;
