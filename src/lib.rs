@@ -175,6 +175,7 @@ pub enum Token<'a> {
     Tab,
 }
 
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OwnedToken {
     Object(String),
@@ -214,6 +215,49 @@ pub enum OwnedToken {
     Tab,
 }
 
+impl OwnedToken {
+    pub fn to_token(&self) -> Token<'_> {
+        match self {
+            OwnedToken::Object(s) => Token::Object(s),
+            OwnedToken::Literal(s) => Token::Literal(s),
+            OwnedToken::Comment(s) => Token::Comment(s),
+
+            OwnedToken::HashTag => Token::HashTag,
+            OwnedToken::GreaterThan => Token::GreaterThan,
+            OwnedToken::LessThan => Token::LessThan,
+            OwnedToken::Equal => Token::Equal,
+            OwnedToken::Exclamation => Token::Exclamation,
+            OwnedToken::Period => Token::Period,
+            OwnedToken::OpenParen => Token::OpenParen,
+            OwnedToken::CloseParen => Token::CloseParen,
+            OwnedToken::OpenCurlyBrace => Token::OpenCurlyBrace,
+            OwnedToken::CloseCurlyBrace => Token::CloseCurlyBrace,
+            OwnedToken::OpenSquareBracket => Token::OpenSquareBracket,
+            OwnedToken::CloseSquareBracket => Token::CloseSquareBracket,
+            OwnedToken::Semicolon => Token::Semicolon,
+            OwnedToken::Comma => Token::Comma,
+            OwnedToken::Asterisk => Token::Asterisk,
+            OwnedToken::Plus => Token::Plus,
+            OwnedToken::Minus => Token::Minus,
+            OwnedToken::ForwardSlash => Token::ForwardSlash,
+            OwnedToken::BackSlash => Token::BackSlash,
+            OwnedToken::Pipe => Token::Pipe,
+            OwnedToken::Ampersand => Token::Ampersand,
+            OwnedToken::ModOperator => Token::ModOperator,
+            OwnedToken::Carrot => Token::Carrot,
+            OwnedToken::Colon => Token::Colon,
+            OwnedToken::At => Token::At,
+            OwnedToken::DollarSign => Token::DollarSign,
+            OwnedToken::Tilda => Token::Tilda,
+            OwnedToken::Tick => Token::Tick,
+            OwnedToken::QuestionMark => Token::QuestionMark,
+            OwnedToken::NewLine => Token::NewLine,
+            OwnedToken::Space => Token::Space,
+            OwnedToken::Tab => Token::Tab,
+        }
+    }
+}
+
 impl<'a> Token<'a> {
     pub fn tokens_to_string(tokens: &[Token]) -> String {
         let mut string = String::new();
@@ -238,7 +282,6 @@ impl<'a> Token<'a> {
         string
     }
 }
-
 
 /// Returns an error if there are any duplicate definitions
 /// Otherwise, adds all definitions in `src` to `dst`
