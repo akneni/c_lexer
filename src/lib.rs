@@ -882,7 +882,7 @@ pub fn get_defines<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
 }
 
 /// Gets the name of a function
-pub fn get_fn_name<'a>(tokens: &'a [Token]) -> &'a str {
+pub fn get_fn_name<'a>(tokens: &'a [Token]) -> Option<&'a str >{
     let mut num_closed_paren = 0;
 
     for i in (0..tokens.len()).rev() {
@@ -895,7 +895,7 @@ pub fn get_fn_name<'a>(tokens: &'a [Token]) -> &'a str {
                 if num_closed_paren == 0 {
                     for j in (0..i).rev() {
                         if let Token::Object(s) = tokens[j] {
-                            return s;
+                            return Some(s);
                         }
                     }
                 }
@@ -904,7 +904,7 @@ pub fn get_fn_name<'a>(tokens: &'a [Token]) -> &'a str {
         }
     }
 
-    unreachable!("Failed to fund function name");
+    None
 }
 
 /// Gets the name of the struct
@@ -1174,7 +1174,7 @@ mod lexer_tests {
 
         let mut log_dump = "".to_string();
         for &def in &fn_defs {
-            let name = get_fn_name(def);
+            let name = get_fn_name(def).unwrap();
             log_dump.push_str(name);
             log_dump.push('\n');
 
