@@ -1,3 +1,5 @@
+mod utils;
+
 use std::{
     collections::{HashMap, HashSet},
     mem,
@@ -637,35 +639,32 @@ pub fn reconstruct_source(tokens: &[Token], exclude_ranges: &[&[Token]]) -> Stri
     Token::tokens_to_string(&new_tokens)
 }
 
-// Extracts the function definitions of all non-static functions
+
+// If there's a preceding comment, it will include it
+// Extracts function declarations and definitions
 pub fn get_fn_def<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
     let mut fn_defs = vec![];
-
-    let mut conditions: [bool; 3];
-
     let mut idx: usize = 0;
+    
     while idx < tokens.len() {
-        conditions = [
-            false, // Starts with at least two objects
-            false, // Has open paren
-            false, // Has close paren
-        ];
-
         let mut next_idx = idx;
+        
+        // Skip comments (but we'll look back for them when we find a function)
         if let Token::Comment(_) = tokens[idx] {
-            skip_to_end_comment(tokens, &mut next_idx);
+            utils::skip_to_end_comment(tokens, &mut next_idx);
             if next_idx >= tokens.len() {
                 break;
             }
         }
 
         if let Token::Object(obj) = tokens[next_idx] {
-            if matches!(obj, "for" | "while" | "if") {
-                skip_to(tokens, Token::CloseParen, &mut next_idx);
+            // Skip control flow keywords
+            if matches!(obj, "for" | "while" | "if" | "switch") {
+                utils::skip_to(tokens, Token::CloseParen, &mut next_idx);
                 idx = next_idx;
                 continue;
             } else if obj == "include" {
-                skip_to_oneof(
+                utils::skip_to_oneof(
                     tokens,
                     &[Token::GreaterThan, Token::Literal("\"")],
                     &mut next_idx,
@@ -673,42 +672,52 @@ pub fn get_fn_def<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
                 idx = next_idx;
                 continue;
             } else if obj == "define" {
-                skip_to(tokens, Token::NewLine, &mut next_idx);
+                utils::skip_to(tokens, Token::NewLine, &mut next_idx);
                 idx = next_idx;
                 continue;
-            } else if obj == "static" {
-                skip_to_oneof(
-                    tokens,
-                    &[Token::OpenParen, Token::OpenCurlyBrace],
-                    &mut next_idx,
-                );
-                idx = next_idx;
-                continue;
-            } else if matches!(obj, "return" | "if") {
+            } else if matches!(obj, "return") {
                 idx = next_idx + 1;
                 continue;
             }
 
-            let mut j = next_idx + 1;
+            let start_idx = next_idx;
+            let mut has_open_paren = false;
+            let mut has_close_paren = false;
+            let mut objects_before_paren = 0;
+            let mut paren_start = 0;
+            
+            let mut j = next_idx;
             while j < tokens.len() {
-                if let Token::Object(obj_2) = tokens[j] {
-                    if matches!(obj_2, "for" | "while" | "if" | "main") {
+                match &tokens[j] {
+                    Token::Object(_) => {
+                        if !has_open_paren {
+                            objects_before_paren += 1;
+                        }
+                    }
+                    Token::OpenParen => {
+                        if !has_open_paren {
+                            paren_start = j;
+                        }
+                        has_open_paren = true;
+                    }
+                    Token::CloseParen => {
+                        has_close_paren = true;
+                    }
+                    Token::OpenCurlyBrace | Token::Semicolon => {
+                        // Function definition (with body) or declaration (without body)
+                        if has_open_paren && has_close_paren 
+                            && is_likely_function(&tokens[start_idx..j], objects_before_paren, paren_start - start_idx) {
+                            // Look backward for any preceding comments
+                            let actual_start = utils::find_preceding_comment_start(tokens, start_idx);
+                            fn_defs.push(&tokens[actual_start..j]);
+                        }
                         break;
                     }
-                    conditions[0] = true;
-                } else if let Token::OpenParen = tokens[j] {
-                    conditions[1] = true;
-                } else if let Token::CloseParen = tokens[j] {
-                    conditions[2] = true;
-                } else if let Token::OpenCurlyBrace = tokens[j] {
-                    if conditions.iter().all(|&i| i) {
-                        fn_defs.push(&tokens[idx..j]);
+                    Token::Equal => {
+                        // Variable assignment, not a function
+                        break;
                     }
-                    break;
-                } else if let Token::Semicolon = tokens[j] {
-                    break;
-                } else if let Token::Equal = tokens[j] {
-                    break;
+                    _ => {}
                 }
                 j += 1;
             }
@@ -728,7 +737,7 @@ pub fn get_includes<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
     while idx < tokens.len() {
         let mut next_idx = idx;
         if let Token::Comment(_) = tokens[next_idx] {
-            skip_to_end_comment(tokens, &mut next_idx);
+            utils::skip_to_end_comment(tokens, &mut next_idx);
             if next_idx >= tokens.len() {
                 break;
             }
@@ -746,7 +755,7 @@ pub fn get_includes<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
             }
 
             let mut end = next_idx + next_nwt;
-            skip_to_oneof(tokens, &[Token::GreaterThan, Token::Literal("")], &mut end);
+            utils::skip_to_oneof(tokens, &[Token::GreaterThan, Token::Literal("")], &mut end);
 
             includes.push(&tokens[idx..(end + 1)]);
             idx = end + 1;
@@ -770,7 +779,7 @@ pub fn get_udts<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
         let start_idx = idx;
 
         if let Token::Comment(_) = tokens[idx] {
-            skip_to_end_comment(tokens, &mut idx);
+            utils::skip_to_end_comment(tokens, &mut idx);
         }
 
         if let Token::Object(obj) = tokens[idx] {
@@ -846,13 +855,13 @@ pub fn get_defines<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
             && mem::discriminant(&tokens[idx]) != mem::discriminant(&Token::Comment(""))
         {
             let valid_prefixes = &[Token::HashTag, Token::Comment("")];
-            skip_to_oneof(tokens, valid_prefixes, &mut idx);
+            utils::skip_to_oneof(tokens, valid_prefixes, &mut idx);
         }
 
         let start_idx = idx;
 
         if let Token::Comment(_) = tokens[idx] {
-            skip_to_end_comment(tokens, &mut idx);
+            utils::skip_to_end_comment(tokens, &mut idx);
         }
 
         if idx + 1 >= tokens.len() || tokens[idx + 1] != Token::Object("define") {
@@ -861,15 +870,41 @@ pub fn get_defines<'a>(tokens: &'a Vec<Token>) -> Vec<&'a [Token<'a>]> {
         }
         idx += 1;
 
-        skip_to(tokens, Token::NewLine, &mut idx);
+        utils::skip_to(tokens, Token::NewLine, &mut idx);
         while idx < tokens.len() && tokens[idx - 1] == Token::BackSlash {
-            skip_to(tokens, Token::NewLine, &mut idx);
+            utils::skip_to(tokens, Token::NewLine, &mut idx);
         }
 
         defines.push(&tokens[start_idx..idx]);
     }
 
     defines
+}
+
+/// Gets the name of a function
+pub fn get_fn_name<'a>(tokens: &'a [Token]) -> &'a str {
+    let mut num_closed_paren = 0;
+
+    for i in (0..tokens.len()).rev() {
+        match tokens[i] {
+            Token::CloseParen => {
+                num_closed_paren += 1;
+            }
+            Token::OpenParen => {
+                num_closed_paren -= 1;
+                if num_closed_paren == 0 {
+                    for j in (0..i).rev() {
+                        if let Token::Object(s) = tokens[j] {
+                            return s;
+                        }
+                    }
+                }
+            }
+            _ => {},
+        }
+    }
+
+    unreachable!("Failed to fund function name");
 }
 
 /// Gets the name of the struct
@@ -926,7 +961,7 @@ pub fn get_udt_name<'a>(tokens: &'a [Token]) -> &'a str {
 pub fn get_define_name<'a>(tokens: &'a [Token]) -> &'a str {
     let mut idx = 0;
     if let Token::Comment(_) = tokens[idx] {
-        skip_to_end_comment(tokens, &mut idx);
+        utils::skip_to_end_comment(tokens, &mut idx);
     }
 
     if tokens.len() < 5 || tokens[idx] != Token::HashTag {
@@ -960,18 +995,18 @@ pub fn get_define_name<'a>(tokens: &'a [Token]) -> &'a str {
 pub fn get_include_name<'a>(tokens: &'a [Token]) -> String {
     let mut idx = 0;
     if let Token::Comment(_) = tokens[idx] {
-        skip_to_end_comment(tokens, &mut idx);
+        utils::skip_to_end_comment(tokens, &mut idx);
     }
 
     assert!(tokens[0] == Token::HashTag);
 
     let target_tok = [Token::LessThan, Token::Literal("")];
-    skip_to_oneof(tokens, &target_tok, &mut idx);
+    utils::skip_to_oneof(tokens, &target_tok, &mut idx);
 
     match tokens[idx] {
         Token::LessThan => {
             let mut end_idx = idx;
-            skip_to(tokens, Token::GreaterThan, &mut end_idx);
+            utils::skip_to(tokens, Token::GreaterThan, &mut end_idx);
 
             return Token::tokens_to_string(&tokens[(idx + 1)..end_idx]);
         }
@@ -982,50 +1017,46 @@ pub fn get_include_name<'a>(tokens: &'a [Token]) -> String {
     }
 }
 
-/// Updates `idx` to point to the next token specified. If the
-/// token does not exist, `idx` will be set equal to tokens.len()
-fn skip_to(tokens: &[Token], target: Token, idx: &mut usize) {
-    for i in (*idx + 1)..tokens.len() {
-        *idx = i;
-        if tokens[i] == target {
-            return;
-        }
+// Heuristic to determine if token sequence is likely a function
+pub fn is_likely_function(tokens: &[Token], objects_before_paren: usize, paren_start: usize) -> bool {
+    // Need at least 2 objects (return type + function name)
+    if objects_before_paren < 2 {
+        return false;
     }
-
-    // If the for loop ends, we haven't found it, so set idx appropriately
-    *idx = tokens.len();
-}
-
-/// Ignores values inside the targets, it just skips to the next token
-/// that's one of the target variants
-fn skip_to_oneof(tokens: &[Token], targets: &[Token], idx: &mut usize) {
-    for i in (*idx + 1)..tokens.len() {
-        *idx = i;
-        for target in targets {
-            if mem::discriminant(&tokens[i]) == mem::discriminant(target) {
-                return;
-            }
+    
+    // Check for type keywords before the parenthesis (strong signal)
+    let has_type_keyword = tokens[..paren_start].iter().any(|tok| {
+        if let Token::Object(obj) = tok {
+            matches!(
+                *obj,
+                "void" | "int" | "char" | "float" | "double" | "long" 
+                | "short" | "unsigned" | "signed" | "struct" | "union" 
+                | "enum" | "static" | "extern" | "inline" | "const"
+                | "volatile" | "register" | "auto" | "restrict" | "_Noreturn"
+            )
+        } else {
+            false
         }
+    });
+    
+    if has_type_keyword {
+        return true;
     }
-}
-
-/// If we have a block commant (or multiple single line comments seperated by no more than a single \n character),
-/// this function will skip to the end of all of them (including the trailing newline if it exists).
-fn skip_to_end_comment(tokens: &[Token], idx: &mut usize) {
-    assert_eq!(
-        mem::discriminant(&tokens[*idx]),
-        mem::discriminant(&Token::Comment(""))
-    );
-
-    while *idx < tokens.len()
-        && (mem::discriminant(&tokens[*idx]) == mem::discriminant(&Token::Comment(""))
-            || tokens[*idx] == Token::NewLine)
-    {
-        if tokens[*idx] == Token::NewLine && *idx+1 < tokens.len() && tokens[*idx + 1] == Token::NewLine {
-            break;
-        }
-        *idx += 1;
+    
+    // Check inside parameters for type keywords or "type name" patterns
+    let param_has_types = utils::has_type_keywords_in_params(tokens);
+    if param_has_types {
+        return true;
     }
+    
+    // Check for operators inside parens (suggests function call, not declaration)
+    let has_operators_in_params = utils::has_operators_in_params(tokens);
+    if has_operators_in_params {
+        return false;
+    }
+    
+    // Default: if we have 2+ objects before paren, assume it's a function
+    true
 }
 
 #[cfg(test)]
@@ -1131,6 +1162,26 @@ mod lexer_tests {
 
         fs::write("tests/lexer.test_get_fn_def.log", format!("{}", log_dump)).unwrap();
 
-        assert_eq!(fn_defs.len(), 3);
+        assert_eq!(fn_defs.len(), 21);
+    }
+
+    #[test]
+    fn test_get_fn_name() {
+        let s = fs::read_to_string("tests/lexer-fn-def.c").unwrap();
+        let tokens = tokenize(&s).unwrap();
+
+        let fn_defs = get_fn_def(&tokens);
+
+        let mut log_dump = "".to_string();
+        for &def in &fn_defs {
+            let name = get_fn_name(def);
+            log_dump.push_str(name);
+            log_dump.push('\n');
+
+        }
+
+        fs::write("tests/lexer.test_get_fn_name.log", format!("{}", log_dump)).unwrap();
+
+        assert_eq!(fn_defs.len(), 21);
     }
 }
